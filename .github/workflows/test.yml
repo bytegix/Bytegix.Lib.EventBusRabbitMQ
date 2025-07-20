@@ -16,7 +16,7 @@ jobs:
     with:
       dotnet_version: '9.0.x'
       configuration: 'Release'
-      solution_name: 'Bytegix.Lib.EventBus.sln'
+      solution_name: 'Bytegix.Lib.EventBusRabbitMQ.sln'
       
   create_nuget:
     name: Create NuGet Package
@@ -25,4 +25,4 @@ jobs:
       dotnet_version: '9.0.x'
       nuget_directory: nuget
       configuration: 'Release'
-      solution_name: 'Bytegix.Lib.EventBus.sln'
+      solution_name: 'Bytegix.Lib.EventBusRabbitMQ.sln'
