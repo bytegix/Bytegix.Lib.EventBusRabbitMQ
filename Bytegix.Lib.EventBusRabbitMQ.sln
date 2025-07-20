@@ -9,7 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02EA681E-C7D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{726362CB-7C54-4ADE-A44A-63FE639BAD3A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bytegix.Lib.EventBusRabbitMQ", "tests\Bytegix.Lib.EventBusRabbitMQ\Bytegix.Lib.EventBusRabbitMQ.csproj", "{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bytegix.Lib.EventBusRabbitMQ.Tests", "tests\Bytegix.Lib.EventBusRabbitMQ.Tests\Bytegix.Lib.EventBusRabbitMQ.Tests.csproj", "{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
