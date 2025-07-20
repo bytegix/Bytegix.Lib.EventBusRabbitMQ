@@ -1,0 +1,28 @@
+name: Run Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  run_tests:
+    name: Run Tests
+    uses: ./.github/workflows/tests.template.yml
+    with:
+      dotnet_version: '9.0.x'
+      configuration: 'Release'
+      solution_name: 'Bytegix.Lib.EventBus.sln'
+      
+  create_nuget:
+    name: Create NuGet Package
+    uses: ./.github/workflows/create-nuget.template.yml
+    with:
+      dotnet_version: '9.0.x'
+      nuget_directory: nuget
+      configuration: 'Release'
+      solution_name: 'Bytegix.Lib.EventBus.sln'

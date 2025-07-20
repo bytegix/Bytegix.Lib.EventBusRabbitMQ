@@ -1,0 +1,78 @@
+name: create-nuget-template
+
+on:
+  workflow_call:
+    inputs:
+      configuration:
+        required: false
+        type: string
+        default: Release
+      dotnet_version:
+        required: false
+        type: string
+        default: '9.0.x'
+      nuget_directory:
+        required: false
+        type: string
+        default: nuget
+        description: 'The directory where the NuGet packages will be stored'
+      solution_name:
+        required: true
+        type: string
+        description: 'The name of the solution file to be used for packing'
+
+jobs:
+  create_nuget:
+    runs-on: ubuntu-24.04
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Get all history to allow automatic versioning using MinVer
+      - name: Remove existing NuGet config
+        run: rm -f ${{ github.workspace }}/nuget.config
+      - name: Setup .NET ${{ inputs.dotnet_version }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}
+            nuget
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ inputs.solution_name }}
+      - run: dotnet pack --configuration ${{ inputs.configuration }} --output ${{ github.workspace }}/${{ inputs.nuget_directory }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            ${{ github.workspace }}/${{ inputs.nuget_directory }}/*.nupkg
+            ${{ github.workspace }}/${{ inputs.nuget_directory }}/*.snupkg
+
+  validate_nuget:
+    runs-on: ubuntu-24.04
+    needs: [ create_nuget ]
+    steps:
+      - name: Setup .NET to use ${{ inputs.dotnet_version }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ inputs.dotnet_version }}'
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget
+          path: ${{ github.workspace }}/${{ inputs.nuget_directory }}
+      - name: Install nuget validator
+        run: dotnet tool update Meziantou.Framework.NuGetPackageValidation.Tool --global
+      - name: Validate package
+        run: |
+          packages=$(find "${{ github.workspace }}/${{ inputs.nuget_directory }}" -name "*.nupkg")
+          meziantou.validate-nuget-package $packages \
+            --excluded-rule-ids 32,52

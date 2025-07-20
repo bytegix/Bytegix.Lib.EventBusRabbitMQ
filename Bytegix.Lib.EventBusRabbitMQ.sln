@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36203.30
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bytegix.Lib.EventBusRabbitMQ", "src\Bytegix.Lib.EventBusRabbitMQ\Bytegix.Lib.EventBusRabbitMQ.csproj", "{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{726362CB-7C54-4ADE-A44A-63FE639BAD3A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C751BCB5-83D4-498C-9D29-70BB56846800}
+	EndGlobalSection
+EndGlobal
