@@ -1,4 +1,5 @@
 ﻿using Bytegix.Lib.EventBus.Abstractions;
+using Bytegix.Lib.EventBusRabbitMQ;
 using Bytegix.Lib.EventBusRabbitMQ.Settings;
 using Bytegix.Lib.EventBusRabbitMQ.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,7 +29,18 @@ public static class RabbitMqDependencyInjectionExtensions
             .WithTracing(tracing => { tracing.AddSource(RabbitMQTelemetry.ActivitySourceName); });
 
         // Options support
-        builder.Services.Configure<EventBusSettings>(builder.Configuration.GetSection(EventBusSettings.SectionName));
+        builder.Services.Configure<EventBusSettings>(opts =>
+        {
+            opts.HostName = settings.HostName;
+            opts.UserName = settings.UserName;
+            opts.Password = settings.Password;
+            opts.VirtualHost = settings.VirtualHost;
+            opts.Port = settings.Port;
+            opts.ConsumerDispatchConcurrency = settings.ConsumerDispatchConcurrency;
+            opts.MaximumInboundMessageSize = settings.MaximumInboundMessageSize;
+            opts.SubscriptionClientName = settings.SubscriptionClientName;
+            opts.RetryCount = settings.RetryCount;
+        });
 
         // Abstractions on top of the core client API
         builder.Services.AddSingleton<RabbitMQTelemetry>();
@@ -49,10 +61,10 @@ public static class RabbitMqDependencyInjectionExtensions
         });
 
         // Register a factory for IConnection using async
-        services.AddSingleton<Func<Task<IConnection>>>(sp =>
+        services.AddSingleton<IConnection>(sp =>
         {
             var factory = sp.GetRequiredService<IConnectionFactory>();
-            return () => factory.CreateConnectionAsync();
+            return factory.CreateConnection();
         });
 
         return services;
