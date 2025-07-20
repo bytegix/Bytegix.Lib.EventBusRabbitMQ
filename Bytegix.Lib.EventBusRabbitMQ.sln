@@ -9,6 +9,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02EA681E-C7D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{726362CB-7C54-4ADE-A44A-63FE639BAD3A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bytegix.Lib.EventBusRabbitMQ", "tests\Bytegix.Lib.EventBusRabbitMQ\Bytegix.Lib.EventBusRabbitMQ.csproj", "{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -19,12 +21,17 @@ Global
 		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{DC9B3EDF-7260-4A8C-A2F6-47A1B394956A} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{3D43DE77-5A79-43F8-9D6F-5D4F5DF6E801} = {726362CB-7C54-4ADE-A44A-63FE639BAD3A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C751BCB5-83D4-498C-9D29-70BB56846800}
