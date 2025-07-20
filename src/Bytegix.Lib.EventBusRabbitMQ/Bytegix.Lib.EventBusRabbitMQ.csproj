@@ -33,13 +33,17 @@
 		<PackageProjectUrl>https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ</PackageProjectUrl>
 		<PackageTags>events, eventbus, rabbitmq</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageReadmeFile>..\..\README.md</PackageReadmeFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<PropertyGroup>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryUrl>https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ</RepositoryUrl>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Aspire.RabbitMQ.Client" Version="9.3.1" />
