@@ -22,10 +22,6 @@
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 	</PropertyGroup>
 
-	<ItemGroup>
-		<None Include="README.md" Pack="true" PackagePath="\" />
-	</ItemGroup>
-
 	<PropertyGroup>
 		<MinVerDefaultPreReleaseIdentifiers>rc</MinVerDefaultPreReleaseIdentifiers>
 	</PropertyGroup>
@@ -37,7 +33,7 @@
 		<PackageProjectUrl>https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ</PackageProjectUrl>
 		<PackageTags>events, eventbus, rabbitmq</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageReadmeFile>..\..\README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<PropertyGroup>
