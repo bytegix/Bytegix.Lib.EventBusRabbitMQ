@@ -2,6 +2,7 @@
 
 [![publish](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/publish.yml/badge.svg)](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/publish.yml)
 [![tests](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/test.yml/badge.svg)](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/test.yml)
+[![CodeQL](https://github.com/bytegix/Bytegix.Lib.EventBus/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/bytegix/Bytegix.Lib.EventBus/actions/workflows/github-code-scanning/codeql)
 
 # README: Using the RabbitMQ Event Bus Library
 
