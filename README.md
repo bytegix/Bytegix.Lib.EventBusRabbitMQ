@@ -1,5 +1,8 @@
 # Bytegix.Lib.EventBusRabbitMQ
 
+[![publish](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/publish.yml/badge.svg)](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/publish.yml)
+[![tests](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/test.yml/badge.svg)](https://github.com/bytegix/Bytegix.Lib.EventBusRabbitMQ/actions/workflows/test.yml)
+
 # README: Using the RabbitMQ Event Bus Library
 
 This library provides a robust implementation for integrating RabbitMQ into your .NET applications. It includes dependency injection extensions, configuration options, and event handling abstractions to simplify message-based communication.
