@@ -1,10 +1,11 @@
 ﻿using System.Diagnostics;
 
+namespace Bytegix.Lib.EventBusRabbitMQ.Extensions;
 
-namespace Bytegix.Lib.EventBusRabbitMQ.Exceptions;
 internal static class ActivityExtensions
 {
-    public static void SetExceptionTags(this Activity? activity, Exception ex)
+    // See https://opentelemetry.io/docs/specs/otel/trace/semantic_conventions/exceptions/
+    public static void SetExceptionTags(this Activity activity, Exception ex)
     {
         if (activity is null)
         {
