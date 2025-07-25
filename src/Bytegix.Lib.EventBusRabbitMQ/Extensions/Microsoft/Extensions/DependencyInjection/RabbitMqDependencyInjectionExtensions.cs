@@ -2,13 +2,13 @@
 using Bytegix.Lib.EventBusRabbitMQ;
 using Bytegix.Lib.EventBusRabbitMQ.Settings;
 using Bytegix.Lib.EventBusRabbitMQ.Telemetry;
-using Microsoft.Extensions.DependencyInjection;
 using Polly.Retry;
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 // ReSharper disable once CheckNamespace
-namespace Microsoft.Extensions.Hosting;
+namespace Microsoft.Extensions.DependencyInjection;
 
 public static class RabbitMqDependencyInjectionExtensions
 {
@@ -16,7 +16,7 @@ public static class RabbitMqDependencyInjectionExtensions
     private static readonly ActivitySource ActivitySource = new(ActivitySourceName);
 
     public static IEventBusBuilder AddRabbitMqEventBus(
-        this IHostApplicationBuilder builder,
+        this IServiceCollection services,
         string host,
         string username,
         string password,
@@ -25,7 +25,7 @@ public static class RabbitMqDependencyInjectionExtensions
         string vhost = "/",
         Action<RabbitMQConfiguration>? configure = null)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -44,13 +44,13 @@ public static class RabbitMqDependencyInjectionExtensions
             port,
             configuration);
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = services.AddRabbitMqEventBus(settings);
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
     public static IEventBusBuilder AddRabbitMqEventBus(
-        this IHostApplicationBuilder builder,
+        this IServiceCollection services,
         string host,
         string username,
         string password,
@@ -59,7 +59,7 @@ public static class RabbitMqDependencyInjectionExtensions
         string vhost = "/",
         RabbitMQConfiguration? configuration = null)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -74,13 +74,13 @@ public static class RabbitMqDependencyInjectionExtensions
             port,
             configuration);
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = services.AddRabbitMqEventBus(settings);
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
     public static IEventBusBuilder AddRabbitMqEventBus(
-        this IHostApplicationBuilder builder,
+        this IServiceCollection builder,
         string host,
         string username,
         string password,
@@ -102,29 +102,29 @@ public static class RabbitMqDependencyInjectionExtensions
             subscriptionClientName,
             port);
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = builder.AddRabbitMqEventBus(settings);
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(builder);
     }
 
-    public static IEventBusBuilder AddRabbitMqEventBus(this IHostApplicationBuilder builder, string connectionString, string subscriptionClientName)
+    public static IEventBusBuilder AddRabbitMqEventBus(this IServiceCollection services, string connectionString, string subscriptionClientName)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionClientName);
 
         var settings = new EventBusSettings(connectionString, subscriptionClientName);
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = services.AddRabbitMqEventBus(settings);
 
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
-    public static IEventBusBuilder AddRabbitMqEventBus(this IHostApplicationBuilder builder, string connectionString, string subscriptionClientName, Action<RabbitMQConfiguration> configure)
+    public static IEventBusBuilder AddRabbitMqEventBus(this IServiceCollection services, string connectionString, string subscriptionClientName, Action<RabbitMQConfiguration> configure)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionClientName);
@@ -134,52 +134,51 @@ public static class RabbitMqDependencyInjectionExtensions
 
         var settings = new EventBusSettings(connectionString, subscriptionClientName, configuration);
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = services.AddRabbitMqEventBus(settings);
 
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
-    public static IEventBusBuilder AddRabbitMqEventBus(this IHostApplicationBuilder builder, string connectionString, string subscriptionClientName, RabbitMQConfiguration configuration)
+    public static IEventBusBuilder AddRabbitMqEventBus(this IServiceCollection services, string connectionString, string subscriptionClientName, RabbitMQConfiguration configuration)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionClientName);
 
         var settings = new EventBusSettings(connectionString, subscriptionClientName, configuration);
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = services.AddRabbitMqEventBus(settings);
 
-
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
-    public static IEventBusBuilder AddRabbitMqEventBus(this IHostApplicationBuilder builder, string sectionName)
+    public static IEventBusBuilder AddRabbitMqEventBus(this IServiceCollection services, IConfiguration configuration, string sectionName)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(sectionName);
 
-        var settings = builder.Configuration.GetSection(sectionName).Get<EventBusSettings>();
+        var settings = configuration.GetSection(sectionName).Get<EventBusSettings>();
 
         if (settings is null)
         {
             throw new ArgumentException($"Configuration section '{sectionName}' not found or is invalid.", nameof(sectionName));
         }
 
-        builder.AddRabbitMqEventBus(settings);
+        _ = services.AddRabbitMqEventBus(settings);
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
-    private static IEventBusBuilder AddRabbitMqEventBus(this IHostApplicationBuilder builder, EventBusSettings settings)
+    private static IEventBusBuilder AddRabbitMqEventBus(this IServiceCollection services, EventBusSettings settings)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(settings.HostName);
         ArgumentException.ThrowIfNullOrWhiteSpace(settings.UserName);
         ArgumentException.ThrowIfNullOrWhiteSpace(settings.Password);
 
-        builder.Services.AddRabbitMqClient(configure =>
+        _ = services.AddRabbitMqClient(configure =>
         {
             configure.HostName = settings.HostName;
             configure.UserName = settings.UserName;
@@ -190,11 +189,11 @@ public static class RabbitMqDependencyInjectionExtensions
         }, settings);
 
         // RabbitMQ.Client doesn't have built-in support for OpenTelemetry, so we need to add it ourselves
-        builder.Services.AddOpenTelemetry()
+        _ = services.AddOpenTelemetry()
             .WithTracing(tracing => { tracing.AddSource(RabbitMQTelemetry.ActivitySourceName); });
 
         // Options support
-        builder.Services.Configure<EventBusSettings>(opts =>
+        _ = services.Configure<EventBusSettings>(opts =>
         {
             opts.HostName = settings.HostName;
             opts.UserName = settings.UserName;
@@ -208,17 +207,17 @@ public static class RabbitMqDependencyInjectionExtensions
         });
 
         // Abstractions on top of the core client API
-        builder.Services.AddSingleton<RabbitMQTelemetry>();
-        builder.Services.AddSingleton<IEventBus, RabbitMQEventBus>();
-        // Start consuming messages as soon as the application starts
-        builder.Services.AddSingleton<IHostedService>(sp => (RabbitMQEventBus)sp.GetRequiredService<IEventBus>());
+        _ = services.AddSingleton<RabbitMQTelemetry>()
+            .AddSingleton<IEventBus, RabbitMQEventBus>()
+            // Start consuming messages as soon as the application starts
+            .AddSingleton<IHostedService>(sp => (RabbitMQEventBus)sp.GetRequiredService<IEventBus>());
 
-        return new EventBusBuilder(builder.Services);
+        return new EventBusBuilder(services);
     }
 
     private static IServiceCollection AddRabbitMqClient(this IServiceCollection services, Action<ConnectionFactory> configure, EventBusSettings settings)
     {
-        services.AddSingleton<IConnectionFactory>(sp =>
+        _ = services.AddSingleton<IConnectionFactory>(sp =>
         {
             var factory = new ConnectionFactory
             {
@@ -229,17 +228,17 @@ public static class RabbitMqDependencyInjectionExtensions
         });
 
         // Register a factory for IConnection using async
-        services.AddSingleton<IConnection>(sp =>
+        _ = services.AddSingleton<IConnection>(sp =>
         {
             var factory = sp.GetRequiredService<IConnectionFactory>();
             return CreateConnection(factory, settings.RetryCount);
         });
 
-        services.AddSingleton<RabbitMQEventSourceLogForwarder>();
+        _ = services.AddSingleton<RabbitMQEventSourceLogForwarder>();
 
         if (!settings.DisableTracing)
         {
-            services.AddOpenTelemetry()
+            _ = services.AddOpenTelemetry()
                 .WithTracing(traceBuilder =>
                         traceBuilder
                             .AddSource(ActivitySourceName)
@@ -255,7 +254,7 @@ public static class RabbitMqDependencyInjectionExtensions
         var resiliencePipelineBuilder = new ResiliencePipelineBuilder();
         if (retryCount > 0)
         {
-            resiliencePipelineBuilder.AddRetry(new RetryStrategyOptions
+            _ = resiliencePipelineBuilder.AddRetry(new RetryStrategyOptions
             {
                 ShouldHandle = static args => args.Outcome is { Exception: SocketException or BrokerUnreachableException }
                     ? PredicateResult.True()
