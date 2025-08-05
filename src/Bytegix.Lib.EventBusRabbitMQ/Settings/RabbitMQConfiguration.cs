@@ -6,7 +6,14 @@ public class RabbitMQConfiguration
     public ushort ConsumerDispatchConcurrency { get; set; } = 1;
     public int MaximumInboundMessageSize { get; set; } = 512 * 1024 * 1024;
     public string ExchangeName { get; set; } = "Default";
+    /// <summary>
+    /// How many times to retry connection to RabbitMQ before giving up.
+    /// </summary>
     public int RetryCount { get; set; } = 10;
+    /// <summary>
+    /// How many times to requeue a message before sending it to the dead-letter queue.
+    /// </summary>
+    public int RequeueCount { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets a boolean value that indicates whether the RabbitMQ health check is disabled or not.
