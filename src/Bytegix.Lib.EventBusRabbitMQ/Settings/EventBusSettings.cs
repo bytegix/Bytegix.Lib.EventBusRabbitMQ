@@ -9,6 +9,7 @@ public class EventBusSettings
     private const int DefaultMaximumInboundMessageSize = 512 * 1024 * 1024; // 512 MB
     private const int DefaultRetryCount = 10;
     private const int DefaultConsumerDispatchConcurrency = 4;
+    private const int DefaultRequeueCount = 10;
 
     // Properties
     // ==============================
@@ -21,7 +22,14 @@ public class EventBusSettings
     public int MaximumInboundMessageSize { get; set; }
     public string? SubscriptionClientName { get; set; }
     public string ExchangeName { get; set; }
+    /// <summary>
+    /// How many times to retry connection to RabbitMQ before giving up.
+    /// </summary>
     public int RetryCount { get; set; }
+    /// <summary>
+    /// How many times to requeue a message before sending it to the dead-letter queue.
+    /// </summary>
+    public int RequeueCount { get; set; } = DefaultRequeueCount;
 
     /// <summary>
     /// Gets or sets a boolean value that indicates whether the RabbitMQ health check is disabled or not.
@@ -62,6 +70,7 @@ public class EventBusSettings
         RetryCount = configuration?.RetryCount ?? DefaultRetryCount;
         DisableHealthChecks = configuration?.DisableHealthChecks ?? false;
         DisableTracing = configuration?.DisableTracing ?? false;
+        RequeueCount = configuration?.RequeueCount ?? DefaultRequeueCount;
     }
 
     public EventBusSettings(string connectionString, string subscriptionClientName, RabbitMQConfiguration? configuration = null)
@@ -83,6 +92,7 @@ public class EventBusSettings
         RetryCount = configuration?.RetryCount ?? DefaultRetryCount;
         DisableHealthChecks = configuration?.DisableHealthChecks ?? false;
         DisableTracing = configuration?.DisableTracing ?? false;
+        RequeueCount = configuration?.RequeueCount ?? DefaultRequeueCount;
     }
 
     // Helpers

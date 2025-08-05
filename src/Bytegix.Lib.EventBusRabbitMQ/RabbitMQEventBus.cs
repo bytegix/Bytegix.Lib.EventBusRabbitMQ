@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Text.Json.Serialization;
+using Bytegix.Lib.EventBus;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
@@ -17,8 +19,8 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
 {
     // Constants
     // ==============================
-    private readonly string _exchangeName;
     private readonly ActivitySource _activitySource;
+    private const string RedeliveredCountHeader = "x-delivery-count";
 
     private readonly ILogger<RabbitMQEventBus> _logger;
 
@@ -27,10 +29,14 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
     private readonly ResiliencePipeline _pipeline;
     private readonly TextMapPropagator _propagator;
     private readonly string _queueName;
+    private readonly string _deadLetterQueueName;
+    private readonly string _exchangeName;
+    private readonly string _deadLetterExchangeName;
     private readonly IServiceProvider _serviceProvider;
     private readonly EventBusSubscriptionInfo _subscriptionInfo;
     private IChannel? _consumerChannel;
     private IConnection? _rabbitMQConnection;
+    private readonly EventBusSettings _eventBusSettings;
 
     // Constructor
     // ==============================
@@ -43,12 +49,15 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         _pipeline = CreateResiliencePipeline(options.Value.RetryCount);
         _queueName = options.Value.SubscriptionClientName ??
                      throw new ApplicationException("Subscription client name is not set in RabbitMQ settings");
+        _deadLetterQueueName = $"{_queueName}{EventBusConstants.DeadLetterSuffix}";
         _exchangeName = options.Value.ExchangeName;
+        _deadLetterExchangeName = $"{_exchangeName}{EventBusConstants.DeadLetterSuffix}";
         _activitySource = rabbitMQTelemetry.ActivitySource;
         _propagator = rabbitMQTelemetry.Propagator;
         _subscriptionInfo = subscriptionOptions.Value;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _eventBusSettings = options.Value;
     }
 
     public void Dispose()
@@ -75,6 +84,7 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
             _logger.LogTrace("Declaring RabbitMQ exchange to publish event: {EventId}", @event.Id);
 
         await channel.ExchangeDeclareAsync(_exchangeName, "direct", cancellationToken: cancellationToken);
+        await channel.ExchangeDeclareAsync(_deadLetterExchangeName, "direct", cancellationToken: cancellationToken);
 
         var body = SerializationUtils.SerializeMessage(@event, _subscriptionInfo);
 
@@ -103,14 +113,29 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
 
             _consumerChannel.CallbackExceptionAsync += async (_, ea) =>
             {
-                _logger.LogWarning(ea.Exception, "Error with RabbitMQ consumer channel");
-                await Task.CompletedTask;
+                _logger.LogCritical(ea.Exception, "Error with RabbitMQ consumer channel");
+                Environment.FailFast("Critical error in StartAsync", ea.Exception);
             };
 
             await _consumerChannel.ExchangeDeclareAsync(_exchangeName,
                 "direct", cancellationToken: cancellationToken);
+            await _consumerChannel.ExchangeDeclareAsync(_deadLetterExchangeName,
+                "direct", cancellationToken: cancellationToken);
 
+            var args = new Dictionary<string, object?>()
+            {
+                {"x-dead-letter-exchange", _deadLetterExchangeName},
+                {"x-delivery-limit", _eventBusSettings.RetryCount},
+                {"x-queue-type", "quorum"}
+            };
             await _consumerChannel.QueueDeclareAsync(_queueName,
+                true,
+                false,
+                false,
+                arguments: args,
+                cancellationToken: cancellationToken);
+            
+            await _consumerChannel.QueueDeclareAsync(_deadLetterQueueName,
                 true,
                 false,
                 false,
@@ -123,11 +148,23 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
             consumer.ReceivedAsync += OnMessageReceived;
 
             await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken);
+            
+            var deadLetterConsumer = new AsyncEventingBasicConsumer(_consumerChannel);
+
+            deadLetterConsumer.ReceivedAsync += OnDeadLetterMessageReceived;
+
+            await _consumerChannel.BasicConsumeAsync(_deadLetterQueueName, false, deadLetterConsumer, cancellationToken);
 
             foreach (var (eventName, _) in _subscriptionInfo.EventTypes)
                 await _consumerChannel.QueueBindAsync(
                     _queueName,
                     _exchangeName,
+                    eventName, cancellationToken: cancellationToken);
+            
+            foreach (var (eventName, _) in _subscriptionInfo.DeadLetterEventTypes)
+                await _consumerChannel.QueueBindAsync(
+                    _deadLetterQueueName,
+                    _deadLetterExchangeName,
                     eventName, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
@@ -136,9 +173,15 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+        if (_logger.IsEnabled(LogLevel.Trace))
+            _logger.LogTrace("Stopping RabbitMQ connection and consumer channel");
+        
+        if (_consumerChannel is not null)
+        {
+            await _consumerChannel.CloseAsync(cancellationToken);
+        }
     }
 
     private async Task ExecutePublishAsync(IChannel channel, string routingKey, byte[] body, IntegrationEvent @event,
@@ -215,43 +258,96 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         var eventName = eventArgs.RoutingKey;
         var message = Encoding.UTF8.GetString(eventArgs.Body.Span);
 
-        try
+        throw new ApplicationException();
+        var success = await ProcessEvent(eventName, message);
+
+        if (success)
         {
-            activity.SetTag("message", message);
+            if (_logger.IsEnabled(LogLevel.Trace))
+                _logger.LogTrace("Successfully processed RabbitMQ event: {EventName}", eventName);
 
-            if (message.Contains("throw-fake-exception", StringComparison.InvariantCultureIgnoreCase))
-                throw new InvalidOperationException($"Fake exception requested: \"{message}\"");
-
-            await ProcessEvent(eventName, message);
+            await _consumerChannel.BasicAckAsync(eventArgs.DeliveryTag, false);
+            return;
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error Processing message \"{Message}\"", message);
+        
+        _logger.LogError("Failed to process RabbitMQ event: {EventName}. Requeuing.", eventName);
+        await _consumerChannel.BasicRejectAsync(eventArgs.DeliveryTag, true);
+    }
+    
+    private async Task OnDeadLetterMessageReceived(object sender, BasicDeliverEventArgs eventArgs)
+    {
+        if (_consumerChannel is null) throw new ApplicationException("Consumer channel is not initialized");
 
-            activity.SetExceptionTags(ex);
+        // Extract the PropagationContext of the upstream parent from the message headers.
+        var parentContext =
+            _propagator.Extract(default, eventArgs.BasicProperties, ExtractTraceContextFromBasicProperties);
+        Baggage.Current = parentContext.Baggage;
+
+        // Start an activity with a name following the semantic convention of the OpenTelemetry messaging specification.
+        // https://github.com/open-telemetry/semantic-conventions/blob/main/docs/messaging/messaging-spans.md
+        var activityName = $"{eventArgs.RoutingKey} receive";
+
+        using var activity =
+            _activitySource.StartActivity(activityName, ActivityKind.Client, parentContext.ActivityContext);
+
+        if (activity is null) throw new ApplicationException("Activity is not initialized");
+
+        RabbitMQTelemetryHelpers.SetMessageActivityContext(activity, eventArgs.RoutingKey, "receive");
+
+        var eventName = eventArgs.RoutingKey;
+        var message = Encoding.UTF8.GetString(eventArgs.Body.Span);
+
+        var success = await ProcessDeadLetterEvent(eventName, message);
+
+        if (success)
+        {
+            await _consumerChannel.BasicAckAsync(eventArgs.DeliveryTag, false);
+        }
+        else
+        {
+            _logger.LogWarning("Failed to process dead letter event: {EventName}, Attempt: {Attempt}. Requeuing.", eventName);
+
+            await _consumerChannel.BasicNackAsync(eventArgs.DeliveryTag, false, true);
+        }
+    }
+
+    private static int GetRedeliveredCount(IReadOnlyBasicProperties basicProperties)
+    {
+        if (basicProperties.Headers != null &&
+            basicProperties.Headers.TryGetValue("x-redelivery-count", out var headerValue) &&
+            headerValue is byte[] headerBytes)
+        {
+            return int.Parse(Encoding.UTF8.GetString(headerBytes));
         }
 
-        // Even on exception we take the message off the queue.
-        // in a REAL WORLD app this should be handled with a Dead Letter Exchange (DLX).
-        // For more information see: https://www.rabbitmq.com/dlx.html
-        await _consumerChannel.BasicAckAsync(eventArgs.DeliveryTag, false);
-        return;
-
-        static IEnumerable<string> ExtractTraceContextFromBasicProperties(IReadOnlyBasicProperties props, string key)
+        return 0;
+    }
+    
+    private void SetRedeliveredCount(IReadOnlyBasicProperties basicProperties, int count)
+    {
+        if (basicProperties.Headers is null)
         {
-            if (props.Headers == null || !props.Headers.TryGetValue(key, out var value))
-                return [];
+            _logger.LogWarning("Headers are null, cannot set redelivery count");
+            throw new ApplicationException("Headers are null, cannot set redelivery count");
+        }
 
-            if (value is byte[] bytes)
-                return [Encoding.UTF8.GetString(bytes)];
-
+        basicProperties.Headers["x-redelivery-count"] = Encoding.UTF8.GetBytes(count.ToString());
+    }
+    
+    private static IEnumerable<string> ExtractTraceContextFromBasicProperties(IReadOnlyBasicProperties props, string key)
+    {
+        if (props.Headers == null || !props.Headers.TryGetValue(key, out var value))
             return [];
-        }
+
+        if (value is byte[] bytes)
+            return [Encoding.UTF8.GetString(bytes)];
+
+        return [];
     }
 
     // Helper Methods
     // ==============================
-    private async Task ProcessEvent(string eventName, string message)
+    private async Task<bool> ProcessEvent(string eventName, string message)
     {
         if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
 
@@ -259,18 +355,57 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
 
         if (!_subscriptionInfo.EventTypes.TryGetValue(eventName, out var eventType))
         {
+            _logger.LogError("Unable to resolve event type for event name {EventName}", eventName);
+            return false;
+        }
+
+        try
+        {
+            var integrationEvent = SerializationUtils.DeserializeMessage(message, eventType, _subscriptionInfo);
+
+            // REVIEW: This could be done in parallel
+
+            foreach (var handler in scope.ServiceProvider.GetKeyedServices<IIntegrationEventHandler>(eventType))
+                await handler.Handle(integrationEvent);
+            return true;
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error processing event: {EventName}", eventName);
+            return false;
+        }
+        
+    }
+    
+    private async Task<bool> ProcessDeadLetterEvent(string eventName, string message)
+    {
+        if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
+
+        await using var scope = _serviceProvider.CreateAsyncScope();
+
+        if (!_subscriptionInfo.DeadLetterEventTypes.TryGetValue(eventName, out var eventType))
+        {
             _logger.LogWarning("Unable to resolve event type for event name {EventName}", eventName);
-            return;
+            return false;
         }
 
         // Deserialize the event
         var integrationEvent = SerializationUtils.DeserializeMessage(message, eventType, _subscriptionInfo);
 
-        // REVIEW: This could be done in parallel
-
         // Get all the handlers using the event type as the key
-        foreach (var handler in scope.ServiceProvider.GetKeyedServices<IIntegrationEventHandler>(eventType))
-            await handler.Handle(integrationEvent);
+        try
+        {
+            foreach (var handler in scope.ServiceProvider.GetKeyedServices<IIntegrationDeadLetterEventHandler>(
+                         eventType))
+                await handler.Handle(integrationEvent);
+            return true;
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error processing dead letter event: {EventName}", eventName);
+            return false;
+        }
+        
     }
 
     private static ResiliencePipeline CreateResiliencePipeline(int retryCount)

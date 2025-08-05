@@ -61,4 +61,8 @@
 	<ItemGroup>
 		<None Include="README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\..\Bytegix.Lib.EventBus\src\Bytegix.Lib.EventBus\Bytegix.Lib.EventBus.csproj" />
+	</ItemGroup>
 </Project>
