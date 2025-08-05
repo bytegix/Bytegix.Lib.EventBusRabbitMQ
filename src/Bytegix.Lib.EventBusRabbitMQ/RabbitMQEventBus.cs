@@ -1,29 +1,21 @@
-﻿using System.Diagnostics;
-using System.Text.Json.Serialization;
-using Bytegix.Lib.EventBus;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using OpenTelemetry;
-using OpenTelemetry.Context.Propagation;
+﻿using Bytegix.Lib.EventBus;
 using Bytegix.Lib.EventBus.Abstractions;
 using Bytegix.Lib.EventBus.Events;
 using Bytegix.Lib.EventBusRabbitMQ.Extensions;
 using Bytegix.Lib.EventBusRabbitMQ.Settings;
-using Bytegix.Lib.EventBusRabbitMQ.Utils;
-using Polly.Retry;
 using Bytegix.Lib.EventBusRabbitMQ.Telemetry;
+using Bytegix.Lib.EventBusRabbitMQ.Utils;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using OpenTelemetry;
+using OpenTelemetry.Context.Propagation;
+using Polly.Retry;
+using System.Diagnostics;
 
 namespace Bytegix.Lib.EventBusRabbitMQ;
 
 public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
 {
-    // Constants
-    // ==============================
-    private readonly ActivitySource _activitySource;
-    private const string RedeliveredCountHeader = "x-delivery-count";
-
-    private readonly ILogger<RabbitMQEventBus> _logger;
-
     // Fields
     // ==============================
     private readonly ResiliencePipeline _pipeline;
@@ -37,6 +29,8 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
     private IChannel? _consumerChannel;
     private IConnection? _rabbitMQConnection;
     private readonly EventBusSettings _eventBusSettings;
+    private readonly ActivitySource _activitySource;
+    private readonly ILogger<RabbitMQEventBus> _logger;
 
     // Constructor
     // ==============================
@@ -60,42 +54,6 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         _eventBusSettings = options.Value;
     }
 
-    public void Dispose()
-    {
-        _consumerChannel?.Dispose();
-    }
-
-    // TODO: Implement Result for return type
-    public async Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
-    {
-        var routingKey = @event.GetType().Name;
-
-        if (_logger.IsEnabled(LogLevel.Trace))
-            _logger.LogTrace("Creating RabbitMQ channel to publish event: {EventId} ({EventName})", @event.Id,
-                routingKey);
-
-        if (_rabbitMQConnection is null)
-            throw new ApplicationException("RabbitMQ connection is not initialized");
-
-        await using var channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken: cancellationToken) ??
-                            throw new ApplicationException("RabbitMQ connection is not initialized");
-
-        if (_logger.IsEnabled(LogLevel.Trace))
-            _logger.LogTrace("Declaring RabbitMQ exchange to publish event: {EventId}", @event.Id);
-
-        await channel.ExchangeDeclareAsync(_exchangeName, "direct", cancellationToken: cancellationToken);
-        await channel.ExchangeDeclareAsync(_deadLetterExchangeName, "direct", cancellationToken: cancellationToken);
-
-        var body = SerializationUtils.SerializeMessage(@event, _subscriptionInfo);
-
-        // Start an activity with a name following the semantic convention of the OpenTelemetry messaging specification.
-        // https://github.com/open-telemetry/semantic-conventions/blob/main/docs/messaging/messaging-spans.md
-        var activityName = $"{routingKey} publish";
-
-        // We call the helper method to perform the actual logic
-        await ExecutePublishAsync(channel, routingKey, body, @event, activityName, cancellationToken);
-    }
-
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         // Messaging is async so we don't need to wait for it to complete. On top of this
@@ -105,9 +63,16 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
             _logger.LogInformation("Starting RabbitMQ connection on a background thread");
 
             _rabbitMQConnection = _serviceProvider.GetRequiredService<IConnection>();
-            if (!_rabbitMQConnection.IsOpen) return;
+            if (!_rabbitMQConnection.IsOpen)
+            {
+                _logger.LogError("RabbitMQ connection is not open. Cannot start consumer channel.");
+                return;
+            }
 
-            if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Creating RabbitMQ consumer channel");
+            if (_logger.IsEnabled(LogLevel.Trace))
+            {
+                _logger.LogTrace("Creating RabbitMQ consumer channel");
+            }
 
             _consumerChannel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken: cancellationToken);
 
@@ -141,7 +106,10 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
                 false,
                 cancellationToken: cancellationToken);
 
-            if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Starting RabbitMQ basic consume");
+            if (_logger.IsEnabled(LogLevel.Trace))
+            {
+                _logger.LogTrace("Starting RabbitMQ basic consume");
+            }
 
             var consumer = new AsyncEventingBasicConsumer(_consumerChannel);
 
@@ -161,7 +129,7 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
                     _exchangeName,
                     eventName, cancellationToken: cancellationToken);
             
-            foreach (var (eventName, _) in _subscriptionInfo.DeadLetterEventTypes)
+            foreach (var (eventName, _) in _subscriptionInfo.EventTypes)
                 await _consumerChannel.QueueBindAsync(
                     _deadLetterQueueName,
                     _deadLetterExchangeName,
@@ -169,19 +137,57 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting RabbitMQ connection");
+            _logger.LogError(ex, "An error occurred while starting the RabbitMQ connection.");
+            Environment.FailFast("Critical error in StartAsync", ex);
         }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         if (_logger.IsEnabled(LogLevel.Trace))
+        {
             _logger.LogTrace("Stopping RabbitMQ connection and consumer channel");
+        }
         
         if (_consumerChannel is not null)
         {
             await _consumerChannel.CloseAsync(cancellationToken);
         }
+    }
+
+    public async Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
+    {
+        var routingKey = @event.GetType().Name;
+
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            _logger.LogTrace("Creating RabbitMQ channel to publish event: {EventId} ({EventName})", @event.Id,
+                            routingKey);
+        }
+            
+
+        if (_rabbitMQConnection is null)
+        {
+            throw new ApplicationException("RabbitMQ connection is not initialized");
+        }
+
+        await using var channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken: cancellationToken) ??
+                            throw new ApplicationException("RabbitMQ connection is not initialized");
+
+        if (_logger.IsEnabled(LogLevel.Trace))
+            _logger.LogTrace("Declaring RabbitMQ exchange to publish event: {EventId}", @event.Id);
+
+        await channel.ExchangeDeclareAsync(_exchangeName, "direct", cancellationToken: cancellationToken);
+        await channel.ExchangeDeclareAsync(_deadLetterExchangeName, "direct", cancellationToken: cancellationToken);
+
+        var body = SerializationUtils.SerializeMessage(@event, _subscriptionInfo);
+
+        // Start an activity with a name following the semantic convention of the OpenTelemetry messaging specification.
+        // https://github.com/open-telemetry/semantic-conventions/blob/main/docs/messaging/messaging-spans.md
+        var activityName = $"{routingKey} publish";
+
+        // We call the helper method to perform the actual logic
+        await ExecutePublishAsync(channel, routingKey, body, @event, activityName, cancellationToken);
     }
 
     private async Task ExecutePublishAsync(IChannel channel, string routingKey, byte[] body, IntegrationEvent @event,
@@ -195,7 +201,10 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
             ActivityContext contextToInject;
 
             contextToInject = activity.Context;
-            if (Activity.Current != null) contextToInject = Activity.Current.Context;
+            if (Activity.Current != null)
+            {
+                contextToInject = Activity.Current.Context;
+            }
 
             var properties = new BasicProperties
             {
@@ -237,7 +246,10 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
 
     private async Task OnMessageReceived(object sender, BasicDeliverEventArgs eventArgs)
     {
-        if (_consumerChannel is null) throw new ApplicationException("Consumer channel is not initialized");
+        if (_consumerChannel is null)
+        { 
+            throw new ApplicationException("Consumer channel is not initialized"); 
+        }
 
         // Extract the PropagationContext of the upstream parent from the message headers.
         var parentContext =
@@ -258,9 +270,8 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         var eventName = eventArgs.RoutingKey;
         var message = Encoding.UTF8.GetString(eventArgs.Body.Span);
 
-        throw new ApplicationException();
         var success = await ProcessEvent(eventName, message);
-
+        success = false;
         if (success)
         {
             if (_logger.IsEnabled(LogLevel.Trace))
@@ -276,7 +287,10 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
     
     private async Task OnDeadLetterMessageReceived(object sender, BasicDeliverEventArgs eventArgs)
     {
-        if (_consumerChannel is null) throw new ApplicationException("Consumer channel is not initialized");
+        if (_consumerChannel is null)
+        {
+            throw new ApplicationException("Consumer channel is not initialized");
+        }
 
         // Extract the PropagationContext of the upstream parent from the message headers.
         var parentContext =
@@ -290,11 +304,30 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         using var activity =
             _activitySource.StartActivity(activityName, ActivityKind.Client, parentContext.ActivityContext);
 
-        if (activity is null) throw new ApplicationException("Activity is not initialized");
+        if (activity is null)
+        {
+            throw new ApplicationException("Activity is not initialized");
+        }
 
         RabbitMQTelemetryHelpers.SetMessageActivityContext(activity, eventArgs.RoutingKey, "receive");
 
         var eventName = eventArgs.RoutingKey;
+
+        if (!_subscriptionInfo.DeadLetterEventTypes.ContainsKey(eventName) && !_subscriptionInfo.IgnoreDeadLetterEventTypes.ContainsKey(eventName))
+        {
+            throw new ApplicationException($"Could not process dead letter message for EventName: {eventName}. Handler is not configured and ignore dead letter is not configured for this type.");
+        }
+        if (_subscriptionInfo.IgnoreDeadLetterEventTypes.ContainsKey(eventName))
+        {
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Ignoring dead letter event: {EventName}. Event type is configured to be ignored.", eventName);
+            }
+            
+            await _consumerChannel.BasicNackAsync(eventArgs.DeliveryTag, false, false);
+            return;
+        }
+
         var message = Encoding.UTF8.GetString(eventArgs.Body.Span);
 
         var success = await ProcessDeadLetterEvent(eventName, message);
@@ -305,33 +338,9 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         }
         else
         {
-            _logger.LogWarning("Failed to process dead letter event: {EventName}, Attempt: {Attempt}. Requeuing.", eventName);
-
-            await _consumerChannel.BasicNackAsync(eventArgs.DeliveryTag, false, true);
+            _logger.LogError("Failed to process dead letter event: {EventName}.", eventName);
+            throw new ApplicationException($"Failed to process dead letter event: {eventName}. Event type is not configured or is ignored.");   
         }
-    }
-
-    private static int GetRedeliveredCount(IReadOnlyBasicProperties basicProperties)
-    {
-        if (basicProperties.Headers != null &&
-            basicProperties.Headers.TryGetValue("x-redelivery-count", out var headerValue) &&
-            headerValue is byte[] headerBytes)
-        {
-            return int.Parse(Encoding.UTF8.GetString(headerBytes));
-        }
-
-        return 0;
-    }
-    
-    private void SetRedeliveredCount(IReadOnlyBasicProperties basicProperties, int count)
-    {
-        if (basicProperties.Headers is null)
-        {
-            _logger.LogWarning("Headers are null, cannot set redelivery count");
-            throw new ApplicationException("Headers are null, cannot set redelivery count");
-        }
-
-        basicProperties.Headers["x-redelivery-count"] = Encoding.UTF8.GetBytes(count.ToString());
     }
     
     private static IEnumerable<string> ExtractTraceContextFromBasicProperties(IReadOnlyBasicProperties props, string key)
@@ -349,7 +358,9 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
     // ==============================
     private async Task<bool> ProcessEvent(string eventName, string message)
     {
-        if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
+        if (_logger.IsEnabled(LogLevel.Trace)) { 
+            _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName); 
+        }
 
         await using var scope = _serviceProvider.CreateAsyncScope();
 
@@ -364,7 +375,6 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
             var integrationEvent = SerializationUtils.DeserializeMessage(message, eventType, _subscriptionInfo);
 
             // REVIEW: This could be done in parallel
-
             foreach (var handler in scope.ServiceProvider.GetKeyedServices<IIntegrationEventHandler>(eventType))
                 await handler.Handle(integrationEvent);
             return true;
@@ -379,20 +389,21 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
     
     private async Task<bool> ProcessDeadLetterEvent(string eventName, string message)
     {
-        if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            _logger.LogTrace("Processing RabbitMQ event: {EventName}", eventName);
+        }
 
         await using var scope = _serviceProvider.CreateAsyncScope();
 
         if (!_subscriptionInfo.DeadLetterEventTypes.TryGetValue(eventName, out var eventType))
         {
             _logger.LogWarning("Unable to resolve event type for event name {EventName}", eventName);
-            return false;
+            throw new ApplicationException("");
         }
 
-        // Deserialize the event
         var integrationEvent = SerializationUtils.DeserializeMessage(message, eventType, _subscriptionInfo);
 
-        // Get all the handlers using the event type as the key
         try
         {
             foreach (var handler in scope.ServiceProvider.GetKeyedServices<IIntegrationDeadLetterEventHandler>(
@@ -410,7 +421,6 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
 
     private static ResiliencePipeline CreateResiliencePipeline(int retryCount)
     {
-        // See https://www.pollydocs.org/strategies/retry.html
         var retryOptions = new RetryStrategyOptions
         {
             ShouldHandle = new PredicateBuilder().Handle<BrokerUnreachableException>().Handle<SocketException>(),
@@ -426,5 +436,10 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         {
             return TimeSpan.FromSeconds(Math.Pow(2, attempt));
         }
+    }
+
+    public void Dispose()
+    {
+        _consumerChannel?.Dispose();
     }
 }
