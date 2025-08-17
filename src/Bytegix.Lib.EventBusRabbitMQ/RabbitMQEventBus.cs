@@ -271,7 +271,7 @@ public sealed class RabbitMQEventBus : IEventBus, IDisposable, IHostedService
         var message = Encoding.UTF8.GetString(eventArgs.Body.Span);
 
         var success = await ProcessEvent(eventName, message);
-        success = false;
+
         if (success)
         {
             if (_logger.IsEnabled(LogLevel.Trace))
